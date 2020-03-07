@@ -20,3 +20,4 @@ from __future__ import print_function
 
 # flake8: noqa : F403, F401
 from tensorflow_scientific.integrate.odes import *
+from tensorflow_scientific.integrate.adjoint import odeint_adjoint

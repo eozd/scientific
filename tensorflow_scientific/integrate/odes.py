@@ -23,6 +23,7 @@ import collections
 
 import six
 
+import tensorflow as tf
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -184,8 +185,11 @@ def _optimal_step_size(last_step, error_ratio, safety=0.9, ifactor=10.0, dfactor
     """Calculate the optimal size for the next Runge-Kutta step."""
 
     error_ratio = math_ops.cast(error_ratio, last_step.dtype)
+    dfactor = tf.cond(error_ratio < 1, lambda: tf.constant(1, dtype=tf.float64), lambda: dfactor)
+    error_ratio = tf.cast(tf.math.sqrt(error_ratio), last_step.dtype)
     exponent = math_ops.cast(1 / order, last_step.dtype)
     factor = math_ops.maximum(1 / ifactor, math_ops.minimum(error_ratio**exponent / safety, 1 / dfactor))
+    #print('FACTOR', factor)
     return math_ops.divide(last_step, factor)
 
 
@@ -273,7 +277,7 @@ def _dopri5(func,
 
         error_tol = atol + rtol * math_ops.maximum(abs(y0), abs(y1))
         tensor_error_ratio = _abs_square(y1_error) / _abs_square(error_tol)
-        error_ratio = math_ops.sqrt(math_ops.reduce_mean(tensor_error_ratio))
+        error_ratio = math_ops.reduce_mean(tensor_error_ratio)
         accept_step = error_ratio <= 1
 
         y_next = control_flow_ops.cond(accept_step, lambda: y1, lambda: y0)
@@ -281,6 +285,9 @@ def _dopri5(func,
         t_next = control_flow_ops.cond(accept_step, lambda: t0 + dt, lambda: t0)
         interp_coeff = control_flow_ops.cond(accept_step, lambda: _interp_fit_rk(y0, y1, k, dt), lambda: interp_coeff)
         dt_next = _optimal_step_size(dt, error_ratio, safety, ifactor, dfactor)
+        #print('T0', t0)
+        #print('dt', dt)
+        #print('T_NEXT', t_next)
         rk_state = _RungeKuttaState(y_next, f_next, t0, t_next, dt_next, interp_coeff)
 
         history = _History(

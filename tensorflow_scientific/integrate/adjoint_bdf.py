@@ -5,7 +5,7 @@ from tensorflow_probability.python.math.ode import BDF
 from collections import namedtuple
 
 
-_Arguments = namedtuple('_Arguments', 'func method options rtol atol bdf_solver')
+_Arguments = namedtuple('_Arguments', 'func bdf_solver')
 _arguments = None
 
 def _flatten(sequence):
@@ -15,17 +15,14 @@ def _flatten(sequence):
     return tf.concat(flat, 0)
 
 @tf.custom_gradient
-def adjoint_method(y0, t):
+def adjoint_method_bdf(y0, t):
     global _arguments
     func = _arguments.func
-    method = _arguments.method
-    options = _arguments.options
-    rtol = _arguments.rtol
-    atol = _arguments.atol
     bdf_solver = _arguments.bdf_solver
 
     # Forward integration
     # ans = odeint(func, y0, t, rtol=rtol, atol=atol, method=method, options=options)
+    print('Calling the BDF solver')
     ans = bdf_solver.solve(func, t[0], y0, t).states
 
     def grad_fn(*grad_output, **kwargs):
@@ -34,10 +31,7 @@ def adjoint_method(y0, t):
         f_params = tuple(variables)
         flat_params = _flatten(variables)
         func = _arguments.func
-        method = _arguments.method
-        options = _arguments.options
-        rtol = _arguments.rtol
-        atol = _arguments.atol
+        bdf_solver = _arguments.bdf_solver
         n_states = ans.shape[0] if len(ans.shape) == 1 else ans.shape[1]
 
         def augmented_dynamics(t, y_aug):
@@ -111,11 +105,11 @@ def adjoint_method(y0, t):
     return ans, grad_fn
 
 
-def odeint_adjoint_bdf(func, y0, t, bdf_solver, rtol=1e-6, atol=1e-12, method=None, options=None):
+def odeint_adjoint_bdf(func, y0, t, bdf_solver):
     if not isinstance(func, tf.keras.Model):
         raise ValueError('func is required to be an instance of tf.keras.Model')
     if not func.built:
         _ = func(t, y0)
     global _arguments
-    _arguments = _Arguments(func, method, options, rtol, atol, bdf_solver)
-    return adjoint_method(y0, t)
+    _arguments = _Arguments(func, bdf_solver)
+    return adjoint_method_bdf(y0, t)

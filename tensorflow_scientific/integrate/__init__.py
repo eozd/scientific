@@ -22,3 +22,4 @@ from __future__ import print_function
 from tensorflow_scientific.integrate.odes import *
 from tensorflow_scientific.integrate.adjoint import odeint_adjoint
 from tensorflow_scientific.integrate.adjoint_bdf import odeint_adjoint_bdf
+from tensorflow_scientific.integrate.forward_sensitivity import odeint_forward_sensitivity

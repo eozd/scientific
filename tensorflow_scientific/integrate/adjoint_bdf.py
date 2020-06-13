@@ -2,17 +2,12 @@ import numpy as np
 import tensorflow as tf
 from tensorflow_scientific.integrate import odeint
 from tensorflow_probability.python.math.ode import BDF
+from tensorflow_scientific.integrate.utils import flatten
 from collections import namedtuple
 
 
 _Arguments = namedtuple('_Arguments', 'func bdf_solver')
 _arguments = None
-
-def _flatten(sequence):
-    if not sequence:
-        return tf.convert_to_tensor([])
-    flat = [tf.reshape(p, [-1]) for p in sequence]
-    return tf.concat(flat, 0)
 
 @tf.custom_gradient
 def adjoint_method_bdf(y0, t):
@@ -29,7 +24,7 @@ def adjoint_method_bdf(y0, t):
         variables = kwargs.get('variables', None)
         global _arguments
         f_params = tuple(variables)
-        flat_params = _flatten(variables)
+        flat_params = flatten(variables)
         func = _arguments.func
         bdf_solver = _arguments.bdf_solver
         n_states = ans.shape[0] if len(ans.shape) == 1 else ans.shape[1]
@@ -54,7 +49,7 @@ def adjoint_method_bdf(y0, t):
                 output_gradients=gradys,
                 unconnected_gradients=tf.UnconnectedGradients.ZERO
             )
-            return -_flatten((func_eval, vjp_y, vjp_t, vjp_params))
+            return -flatten((func_eval, vjp_y, vjp_t, vjp_params))
 
         # Backward integration using augmented state
         T = ans.shape[0]
@@ -71,7 +66,7 @@ def adjoint_method_bdf(y0, t):
             adj_time = adj_time - dLd_cur_t
             time_vjps.append(dLd_cur_t)
 
-            aug_y0 = _flatten((ans[i], adj_y, adj_time, adj_params))
+            aug_y0 = flatten((ans[i], adj_y, adj_time, adj_params))
 
             aug_ans = bdf_solver.solve(
                 augmented_dynamics,
@@ -89,7 +84,7 @@ def adjoint_method_bdf(y0, t):
             adj_y += grad_output[-1][i-1]
 
         time_vjps.append(adj_time)
-        time_vjps = _flatten(time_vjps)
+        time_vjps = flatten(time_vjps)
 
         adj_params_list = []
         beg = 0

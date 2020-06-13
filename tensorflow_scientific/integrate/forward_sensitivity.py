@@ -24,32 +24,33 @@ def forward_sensitivity_method(y0, t):
 
     if return_sensitivities:
         # Augmented forward integration
-        def dfdx(t, x):
+        def dfdx(x, t):
             with tf.GradientTape() as tape:
                 tape.watch(x)
-                func_out = func(t, x)
-            return tape.jacobian(func_out, x)
+                func_out = func(x, t)
+            return tape.jacobian(func_out, x, unconnected_gradients='zero')
 
-        def dfdp(t, x):
+        def dfdp(x, t):
             with tf.GradientTape() as tape:
                 tape.watch(func.theta)
                 tape.watch(y0)
-                func_out = func(t, x)
-            return tape.jacobian(func_out, [func.theta, y0])
+                func_out = func(x, t)
+            jac_list = tape.jacobian(func_out, [func.theta, y0], unconnected_gradients='zero')
+            return tf.concat(jac_list, axis=1)
 
-        def aug_func(t, x_aug):
+        def aug_func(x_aug, t):
             x = x_aug[:n_states]
             dxdp = tf.reshape(x_aug[n_states:], [n_states, n_theta + n_ivs])
 
-            dxdt = func(t, x)
-            d_dxdp_dt = tf.matmul(dfdx(t, x), dxdp) + dfdp(t, x)
+            dxdt = func(x, t)
+            d_dxdp_dt = tf.matmul(dfdx(x, t), dxdp) + dfdp(x, t)
             return flatten([dxdt, d_dxdp_dt])
         
-        y0_aug = tf.zeros(n_states + n_states * (n_theta + n_ivs), dtype=tf.float64)
-        y0_aug[:n_states] = tf.squeeze(y0)
+        aug_rest = np.zeros(n_states * (n_theta + n_ivs))
         for i in range(n_ivs):
             offset = n_theta * (i + 1) + n_ivs * i + i
-            y0_aug[n_states + offset] = 1.0
+            aug_rest[offset] = 1.0
+        y0_aug = tf.cast(flatten([y0, aug_rest]), tf.float64)
 
         result = odeint(aug_func, y0_aug, t, rtol=rtol, atol=atol, method=method, options=options)
         y = result[:, :n_states]

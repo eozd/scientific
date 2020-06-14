@@ -5,10 +5,11 @@ from tensorflow_scientific.integrate.utils import flatten
 from collections import namedtuple
 
 
-_Arguments = namedtuple('_Arguments', 'func return_sensitivities method options rtol atol')
+_Arguments = namedtuple('_Arguments', 'func method options rtol atol, t')
 _arguments = None
 
-def forward_sensitivity_method(y0, t):
+@tf.custom_gradient
+def forward_sensitivity_method(y0):
     # Code adapted to TF from https://docs.pymc.io/notebooks/ODE_with_manual_gradients.html
 
     global _arguments
@@ -17,12 +18,18 @@ def forward_sensitivity_method(y0, t):
     options = _arguments.options
     rtol = _arguments.rtol
     atol = _arguments.atol
-    return_sensitivities = _arguments.return_sensitivities
-    n_states = len(tf.squeeze(y0))
-    n_theta = len(tf.squeeze(func.theta))
+    t = _arguments.t
+    n_states = tf.squeeze(y0).shape[0]
+    n_theta = tf.squeeze(func.theta).shape[0]
     n_ivs = n_states
 
-    if return_sensitivities:
+    ans = odeint(func, y0, t, rtol=rtol, atol=atol, method=method, options=options)
+    T = ans.shape[0]
+
+    def grad_fn(*grad_output, **kwargs):
+        variables = kwargs.get('variables', None)
+        f_params = tuple(variables)
+
         # Augmented forward integration
         def dfdx(x, t):
             with tf.GradientTape() as tape:
@@ -32,10 +39,9 @@ def forward_sensitivity_method(y0, t):
 
         def dfdp(x, t):
             with tf.GradientTape() as tape:
-                tape.watch(func.theta)
-                tape.watch(y0)
+                tape.watch(f_params)
                 func_out = func(x, t)
-            jac_list = tape.jacobian(func_out, [func.theta, y0], unconnected_gradients='zero')
+            jac_list = tape.jacobian(func_out, f_params + (y0,), unconnected_gradients='zero')
             return tf.concat(jac_list, axis=1)
 
         def aug_func(x_aug, t):
@@ -54,21 +60,33 @@ def forward_sensitivity_method(y0, t):
 
         result = odeint(aug_func, y0_aug, t, rtol=rtol, atol=atol, method=method, options=options)
         y = result[:, :n_states]
-        dydp = tf.reshape(result[:, n_states:], [len(t), n_states, n_theta + n_ivs])
+        dydp = tf.reshape(result[:, n_states:], [T, n_states, n_theta + n_ivs])
         dydtheta = dydp[:, :, :n_theta]
         dydy0 = dydp[:, :, n_theta:]
-        ans = (y, dydtheta, dydy0)
-    else:
-        ans = odeint(func, y0, t, rtol=rtol, atol=atol, method=method, options=options)
+        
+        grad_output = grad_output[-1]
+        dLdtheta = tf.squeeze(tf.matmul(tf.transpose(dydtheta, [0, 2, 1]), tf.expand_dims(grad_output, -1)))
+        dLdy0 = tf.squeeze(tf.matmul(tf.transpose(dydtheta, [0, 2, 1]), tf.expand_dims(grad_output, -1)))
 
-    return ans
+        dLdtheta_list = []
+        beg = 0
+        for v in variables:
+            shape = v.shape
+            size = tf.size(v)
+            end = beg + size
+            dLdtheta_list.append(tf.reshape(dLdtheta[:, beg:end], [T] + shape))
+            beg = end
+
+        return dLdy0, dLdtheta_list
+
+    return ans, grad_fn
 
 
-def odeint_forward_sensitivity(func, y0, t, return_sensitivities=False, rtol=1e-6, atol=1e-12, method=None, options=None):
+def odeint_forward_sensitivity(func, y0, t, rtol=1e-6, atol=1e-12, method=None, options=None):
     if not isinstance(func, tf.keras.Model):
         raise ValueError('func is required to be an instance of tf.keras.Model')
     if not func.built:
         _ = func(y0, t)
     global _arguments
-    _arguments = _Arguments(func, return_sensitivities, method, options, rtol, atol)
-    return forward_sensitivity_method(y0, t)
+    _arguments = _Arguments(func, method, options, rtol, atol, t)
+    return forward_sensitivity_method(y0)

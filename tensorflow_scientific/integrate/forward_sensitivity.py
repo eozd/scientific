@@ -11,6 +11,7 @@ _arguments = None
 @tf.custom_gradient
 def forward_sensitivity_method(y0):
     # Code adapted to TF from https://docs.pymc.io/notebooks/ODE_with_manual_gradients.html
+    expanded = len(y0.shape) > 1
 
     global _arguments
     func = _arguments.func
@@ -19,6 +20,7 @@ def forward_sensitivity_method(y0):
     rtol = _arguments.rtol
     atol = _arguments.atol
     t = _arguments.t
+    y0 = tf.squeeze(y0)
     n_states = tf.squeeze(y0).shape[0]
     n_theta = tf.squeeze(func.theta).shape[0]
     n_ivs = n_states
@@ -42,6 +44,7 @@ def forward_sensitivity_method(y0):
                 tape.watch(f_params)
                 func_out = func(x, t)
             jac_list = tape.jacobian(func_out, f_params + (y0,), unconnected_gradients='zero')
+            jac_list = tuple(tf.squeeze(v) for v in jac_list)
             return tf.concat(jac_list, axis=1)
 
         def aug_func(x_aug, t):
@@ -66,7 +69,8 @@ def forward_sensitivity_method(y0):
 
         def vec_jac_prod(dydp, dLdy):
             dydp_T = tf.transpose(dydp, [0, 2, 1])
-            dLdy = tf.expand_dims(dLdy, -1)
+            if len(dLdy.shape) < len(dydp_T.shape):
+                dLdy = tf.expand_dims(dLdy, -1)
             return tf.squeeze(tf.math.reduce_sum(tf.matmul(dydp_T, dLdy), axis=0))
 
         grad_output = grad_output[-1]
@@ -84,6 +88,8 @@ def forward_sensitivity_method(y0):
 
         return dLdy0, dLdtheta_list
 
+    if expanded:
+        ans = tf.expand_dims(ans, -1)
     return ans, grad_fn
 
 

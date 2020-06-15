@@ -63,10 +63,15 @@ def forward_sensitivity_method(y0):
         dydp = tf.reshape(result[:, n_states:], [T, n_states, n_theta + n_ivs])
         dydtheta = dydp[:, :, :n_theta]
         dydy0 = dydp[:, :, n_theta:]
-        
+
+        def vec_jac_prod(dydp, dLdy):
+            dydp_T = tf.transpose(dydp, [0, 2, 1])
+            dLdy = tf.expand_dims(dLdy, -1)
+            return tf.squeeze(tf.math.reduce_sum(tf.matmul(dydp_T, dLdy), axis=0))
+
         grad_output = grad_output[-1]
-        dLdtheta = tf.squeeze(tf.matmul(tf.transpose(dydtheta, [0, 2, 1]), tf.expand_dims(grad_output, -1)))
-        dLdy0 = tf.squeeze(tf.matmul(tf.transpose(dydtheta, [0, 2, 1]), tf.expand_dims(grad_output, -1)))
+        dLdtheta = vec_jac_prod(dydtheta, grad_output)
+        dLdy0 = vec_jac_prod(dydy0, grad_output)
 
         dLdtheta_list = []
         beg = 0
@@ -74,7 +79,7 @@ def forward_sensitivity_method(y0):
             shape = v.shape
             size = tf.size(v)
             end = beg + size
-            dLdtheta_list.append(tf.reshape(dLdtheta[:, beg:end], [T] + shape))
+            dLdtheta_list.append(tf.reshape(dLdtheta[beg:end], shape))
             beg = end
 
         return dLdy0, dLdtheta_list

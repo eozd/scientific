@@ -22,7 +22,7 @@ def forward_sensitivity_method(y0):
     t = _arguments.t
     y0 = tf.squeeze(y0)
     n_states = tf.squeeze(y0).shape[0]
-    n_theta = tf.squeeze(func.theta).shape[0]
+    n_theta = tf.squeeze(func.theta, -1).shape[0]
     n_ivs = n_states
 
     ans = odeint(func, y0, t, rtol=rtol, atol=atol, method=method, options=options)
@@ -30,7 +30,7 @@ def forward_sensitivity_method(y0):
 
     def grad_fn(*grad_output, **kwargs):
         variables = kwargs.get('variables', None)
-        f_params = tuple(variables)
+        f_params = tuple(tf.squeeze(v, -1) for v in variables)
 
         # Augmented forward integration
         def dfdx(x, t):
@@ -44,7 +44,6 @@ def forward_sensitivity_method(y0):
                 tape.watch(f_params)
                 func_out = func(x, t)
             jac_list = tape.jacobian(func_out, f_params + (y0,), unconnected_gradients='zero')
-            jac_list = tuple(tf.squeeze(v) for v in jac_list)
             return tf.concat(jac_list, axis=1)
 
         def aug_func(x_aug, t):
@@ -71,7 +70,7 @@ def forward_sensitivity_method(y0):
             dydp_T = tf.transpose(dydp, [0, 2, 1])
             if len(dLdy.shape) < len(dydp_T.shape):
                 dLdy = tf.expand_dims(dLdy, -1)
-            return tf.squeeze(tf.math.reduce_sum(tf.matmul(dydp_T, dLdy), axis=0))
+            return tf.squeeze(tf.math.reduce_sum(tf.matmul(dydp_T, dLdy), axis=0), -1)
 
         grad_output = grad_output[-1]
         dLdtheta = vec_jac_prod(dydtheta, grad_output)

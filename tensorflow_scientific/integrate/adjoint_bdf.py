@@ -1,3 +1,9 @@
+"""
+This code is adapted from https://github.com/titu1994/tfdiffeq/blob/master/tfdiffeq/adjoint.py
+but instead of using the dopri5 solver provided with tensorflow scientific, it uses BDF algorithm from
+tensorflow probability, which is supposed to be numerically more stable in stiff regions than dopri5.
+"""
+
 import numpy as np
 import tensorflow as tf
 from tensorflow_scientific.integrate import odeint

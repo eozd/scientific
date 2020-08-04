@@ -1,3 +1,8 @@
+"""
+This code is adapted to from https://docs.pymc.io/notebooks/ODE_with_manual_gradients.html
+to use with TF 2.0. It works in graph mode and seems to be fast enough, for now.
+"""
+
 import numpy as np
 import tensorflow as tf
 from tensorflow_scientific.integrate import odeint

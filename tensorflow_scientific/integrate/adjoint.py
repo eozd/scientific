@@ -1,3 +1,9 @@
+"""
+This code is adapted from https://github.com/titu1994/tfdiffeq/blob/master/tfdiffeq/adjoint.py
+to use with tensorflow_scientific. The main reason for this is that the cited repository works only
+in TensorFlow 2.0 Eager mode, which is very slow. This adaptation can work in TF 2.0
+graph mode and is way faster.
+"""
 import numpy as np
 import tensorflow as tf
 from collections import namedtuple

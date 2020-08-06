@@ -30,6 +30,10 @@ def forward_sensitivity_method(y0):
     n_theta = tf.squeeze(func.theta, -1).shape[0]
     n_ivs = n_states
 
+    # TODO: this is inefficient; normally in forward sensitivity method, the gradients are
+    # computed at the same time as the states. The current implementation is a hack to fit forward
+    # sensitivity into TF forward-backward pass structure; but a better way would be to compute the gradients
+    # here and read them from grad_fn instead of recomputing it.
     ans = odeint(func, y0, t, rtol=rtol, atol=atol, method=method, options=options)
     T = ans.shape[0]
 
